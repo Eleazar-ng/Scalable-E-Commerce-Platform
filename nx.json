@@ -39,7 +39,15 @@
       "options": {
         "targetName": "test"
       },
-      "exclude": ["apps/ecommerce-platform-e2e/**/*"]
+      "exclude": [
+        "apps/api-gateway-e2e/**/*",
+        "apps/cart-service-e2e/**/*",
+        "apps/notification-service-e2e/**/*",
+        "apps/order-service-e2e/**/*",
+        "apps/payment-service-e2e/**/*",
+        "apps/product-catalog-service-e2e/**/*",
+        "apps/user-service-e2e/**/*"
+      ]
     }
   ]
 }
