@@ -43,3 +43,16 @@ Thumbs.db
 .nx/migrate-runs
 .claude/worktrees
 .claude/settings.local.json
+
+# environment files (per docs/03_prisma_conventions.md)
+.env
+.env.local
+apps/*/.env
+apps/*/.env.local
+
+# Prisma generated client (regenerated via `prisma generate`)
+apps/*/prisma/generated
+
+# Postgres/Kafka/Redis data (docker-compose volumes are named, not bind mounts,
+# but keep this in case anyone switches to bind mounts locally)
+.docker-data/
