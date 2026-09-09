@@ -9,6 +9,7 @@ export const KafkaTopics = {
   ORDER_EVENTS: 'order-events',
   PAYMENT_EVENTS: 'payment-events',
   CATALOG_EVENTS: 'catalog-events',
+  USER_EVENTS: 'user-events',
 } as const;
 
 export type KafkaTopic = (typeof KafkaTopics)[keyof typeof KafkaTopics];
