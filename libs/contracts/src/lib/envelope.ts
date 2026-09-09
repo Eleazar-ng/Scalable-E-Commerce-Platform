@@ -13,6 +13,7 @@ import { orderConfirmedPayloadSchema } from './events/order-confirmed';
 import { orderFailedPayloadSchema } from './events/order-failed';
 import { inventoryReservationReleasedPayloadSchema } from './events/inventory-reservation-released';
 import { paymentAuthorizationVoidedPayloadSchema } from './events/payment-authorization-voided';
+import { userRegisteredPayloadSchema } from './events/user-registered';
 
 /**
  * Every event in the platform is wrapped in this envelope. `correlationId`
@@ -55,7 +56,8 @@ export const eventSchemaRegistry = {
   [EventType.ORDER_FAILED]: orderFailedPayloadSchema,
   [EventType.INVENTORY_RESERVATION_RELEASED]: inventoryReservationReleasedPayloadSchema,
   [EventType.PAYMENT_AUTHORIZATION_VOIDED]: paymentAuthorizationVoidedPayloadSchema,
-} as const satisfies Record<EventTypeValue, z.ZodTypeAny>;
+  [EventType.USER_REGISTERED]: userRegisteredPayloadSchema,
+} as const satisfies Record<EventTypeValue, z.ZodType>;
 
 /**
  * Builds a fully-formed, schema-valid envelope for a given event type.

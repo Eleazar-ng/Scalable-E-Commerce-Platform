@@ -16,6 +16,9 @@ export const EventType = {
   ORDER_FAILED: 'OrderFailed',
   INVENTORY_RESERVATION_RELEASED: 'InventoryReservationReleased',
   PAYMENT_AUTHORIZATION_VOIDED: 'PaymentAuthorizationVoided',
+
+  // User Service (not a saga participant - a standalone domain event)
+  USER_REGISTERED: 'UserRegistered',
 } as const;
 
 export type EventTypeValue = (typeof EventType)[keyof typeof EventType];

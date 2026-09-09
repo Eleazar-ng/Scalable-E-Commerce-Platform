@@ -14,4 +14,4 @@ export * from './lib/events/order-confirmed';
 export * from './lib/events/order-failed';
 export * from './lib/events/inventory-reservation-released';
 export * from './lib/events/payment-authorization-voided';
-
+export * from './lib/events/user-registered';
