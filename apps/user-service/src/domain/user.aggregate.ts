@@ -5,7 +5,9 @@ import { UserDomainEvent } from './user-domain-event';
 import {
   InvalidUserNameException,
   UserAlreadyActiveException,
+  UserAlreadyDeletedException,
   UserAlreadySuspendedException,
+  UserIsDeletedException,
 } from './user.errors';
 
 export type UserRole = 'CUSTOMER' | 'ADMIN';
@@ -21,6 +23,7 @@ export interface UserProps {
   status: UserStatus;
   createdAt: Date;
   updatedAt: Date;
+  deletedAt: Date | null;
 }
 
 /**
@@ -63,6 +66,7 @@ export class User {
       status: 'ACTIVE',
       createdAt: now,
       updatedAt: now,
+      deletedAt: null
     });
 
     user.domainEvents.push({
@@ -85,6 +89,7 @@ export class User {
   }
 
   suspend(): void {
+    this.assertNotDeleted();
     if (this.props.status === 'SUSPENDED') {
       throw new UserAlreadySuspendedException(this.props.id);
     }
@@ -93,6 +98,7 @@ export class User {
   }
 
   reactivate(): void {
+    this.assertNotDeleted();
     if (this.props.status === 'ACTIVE') {
       throw new UserAlreadyActiveException(this.props.id);
     }
@@ -101,8 +107,28 @@ export class User {
   }
 
   changePasswordHash(newHash: PasswordHash): void {
+    this.assertNotDeleted();
     this.props.passwordHash = newHash;
     this.props.updatedAt = new Date();
+  }
+
+  /**
+   * Soft-deletes the user - sets deletedAt rather than removing the row.
+   * Once deleted, no other mutating operation is permitted on this
+   * aggregate (enforced by assertNotDeleted() in every mutator above).
+   */
+  softDelete(): void {
+    if (this.props.deletedAt !== null) {
+      throw new UserAlreadyDeletedException(this.props.id);
+    }
+    this.props.deletedAt = new Date();
+    this.props.updatedAt = new Date();
+  }
+
+  private assertNotDeleted(): void {
+    if (this.props.deletedAt !== null) {
+      throw new UserIsDeletedException(this.props.id);
+    }
   }
 
   pullDomainEvents(): UserDomainEvent[] {
@@ -141,6 +167,14 @@ export class User {
 
   get updatedAt(): Date {
     return this.props.updatedAt;
+  }
+
+  get deletedAt(): Date | null {
+    return this.props.deletedAt;
+  }
+
+  get isDeleted(): boolean {
+    return this.props.deletedAt !== null;
   }
 
   /** Plain-object snapshot, e.g. for persistence mapping in the adapter layer. */

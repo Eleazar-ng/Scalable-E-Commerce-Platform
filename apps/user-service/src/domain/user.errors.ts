@@ -17,3 +17,15 @@ export class UserAlreadyActiveException extends DomainException {
     super('User is already active', { userId });
   }
 }
+
+export class UserAlreadyDeletedException extends DomainException {
+  constructor(userId: string) {
+    super('User is already deleted', { userId });
+  }
+}
+
+export class UserIsDeletedException extends DomainException {
+  constructor(userId: string) {
+    super('Cannot modify a deleted user', { userId });
+  }
+}
