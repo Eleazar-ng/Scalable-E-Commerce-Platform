@@ -4,7 +4,9 @@ import { User } from './user.aggregate';
 import {
   InvalidUserNameException,
   UserAlreadyActiveException,
+  UserAlreadyDeletedException,
   UserAlreadySuspendedException,
+  UserIsDeletedException,
 } from './user.errors';
 
 function buildValidRegisterParams(overrides: Partial<{ firstName: string; lastName: string }> = {}) {
@@ -120,6 +122,49 @@ describe('User.changePasswordHash', () => {
   });
 });
 
+describe('User.softDelete', () => {
+  it('sets deletedAt and isDeleted becomes true', () => {
+    const user = User.register(buildValidRegisterParams());
+    expect(user.isDeleted).toBe(false);
+
+    user.softDelete();
+
+    expect(user.isDeleted).toBe(true);
+    expect(user.deletedAt).not.toBeNull();
+  });
+
+  it('throws if already deleted', () => {
+    const user = User.register(buildValidRegisterParams());
+    user.softDelete();
+    expect(() => user.softDelete()).toThrow(UserAlreadyDeletedException);
+  });
+
+  it('updates updatedAt on delete', () => {
+    const user = User.register(buildValidRegisterParams());
+    const originalUpdatedAt = user.updatedAt;
+
+    jest.useFakeTimers().setSystemTime(new Date(originalUpdatedAt.getTime() + 1000));
+    user.softDelete();
+    jest.useRealTimers();
+
+    expect(user.updatedAt.getTime()).toBeGreaterThan(originalUpdatedAt.getTime());
+  });
+
+  it.each([
+    ['suspend', (u: User) => u.suspend()],
+    ['reactivate', (u: User) => u.reactivate()],
+    ['changePasswordHash', (u: User) => u.changePasswordHash(PasswordHash.fromHash('$argon2id$x'))],
+    ['softDelete', (u: User) => u.softDelete()],
+  ])('blocks %s once the user is deleted', (_name, action) => {
+    const user = User.register(buildValidRegisterParams());
+    user.softDelete();
+
+    expect(() => action(user)).toThrow(
+      _name === 'softDelete' ? UserAlreadyDeletedException : UserIsDeletedException
+    );
+  });
+});
+
 describe('User.reconstitute', () => {
   it('rehydrates a user from persisted props without raising domain events', () => {
     const now = new Date();
@@ -133,12 +178,32 @@ describe('User.reconstitute', () => {
       status: 'SUSPENDED',
       createdAt: now,
       updatedAt: now,
+      deletedAt: null,
     });
 
     expect(user.id).toBe('existing-id');
     expect(user.role).toBe('ADMIN');
     expect(user.status).toBe('SUSPENDED');
+    expect(user.isDeleted).toBe(false);
     expect(user.pullDomainEvents()).toHaveLength(0);
+  });
+
+  it('rehydrates a deleted user correctly', () => {
+    const now = new Date();
+    const user = User.reconstitute({
+      id: 'deleted-id',
+      email: Email.create('deleted@example.com'),
+      passwordHash: PasswordHash.fromHash('$argon2id$hash'),
+      firstName: 'Deleted',
+      lastName: 'User',
+      role: 'CUSTOMER',
+      status: 'ACTIVE',
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: now,
+    });
+
+    expect(user.isDeleted).toBe(true);
   });
 });
 
