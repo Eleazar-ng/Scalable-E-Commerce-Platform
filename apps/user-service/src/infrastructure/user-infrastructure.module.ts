@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { TerminusModule } from '@nestjs/terminus';
 import { USER_REPOSITORY } from '../application/ports/user-repository.port';
 import { PASSWORD_HASHER } from '../application/ports/password-hasher.port';
 import { TOKEN_SERVICE } from '../application/ports/token-service.port';
@@ -10,6 +11,7 @@ import { JoseTokenService } from './security/jose-token.service';
 import { RedisRefreshTokenBlocklist } from './security/redis-refresh-token-blocklist';
 import { JWT_CONFIG, JwtConfig } from './security/jwt.config';
 import { REDIS_CONFIG, RedisConfig } from './security/redis.config';
+import { RedisHealthIndicator } from './health/redis-health.indicator';
 
 /**
  * Wires every adapter built in Stage 2.2 to the port it satisfies.
@@ -21,6 +23,7 @@ import { REDIS_CONFIG, RedisConfig } from './security/redis.config';
  * below this module touches process.env directly.
  */
 @Module({
+  imports: [TerminusModule],
   providers: [
     PrismaService,
     {
@@ -45,7 +48,8 @@ import { REDIS_CONFIG, RedisConfig } from './security/redis.config';
     { provide: PASSWORD_HASHER, useClass: Argon2PasswordHasher },
     { provide: TOKEN_SERVICE, useClass: JoseTokenService },
     { provide: REFRESH_TOKEN_BLOCKLIST, useClass: RedisRefreshTokenBlocklist },
+    RedisHealthIndicator
   ],
-  exports: [USER_REPOSITORY, PASSWORD_HASHER, TOKEN_SERVICE, REFRESH_TOKEN_BLOCKLIST],
+  exports: [USER_REPOSITORY, PASSWORD_HASHER, TOKEN_SERVICE, REFRESH_TOKEN_BLOCKLIST, JWT_CONFIG, PrismaService, RedisHealthIndicator],
 })
 export class UserInfrastructureModule {}

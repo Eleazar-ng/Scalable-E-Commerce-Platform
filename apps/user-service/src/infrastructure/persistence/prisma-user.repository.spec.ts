@@ -1,3 +1,4 @@
+import { ConflictException } from '@ecommerce-platform/common';
 import { User } from '../../domain/user.aggregate';
 import { Email } from '../../domain/value-objects/email.vo';
 import { PasswordHash } from '../../domain/value-objects/password-hash.vo';
@@ -20,6 +21,10 @@ function buildPrismaMock() {
       update: jest.fn(),
       findFirst: jest.fn(),
     },
+    outbox: {
+      create: jest.fn(),
+    },
+    $transaction: jest.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -45,6 +50,14 @@ describe('PrismaUserRepository', () => {
     });
   });
 
+  it('create() translates a Prisma P2002 (unique constraint) error into ConflictException', async () => {
+    const prisma = buildPrismaMock();
+    prisma.user.create.mockRejectedValue({ code: 'P2002', meta: { target: ['email'] } });
+    const repo = new PrismaUserRepository(prisma as any);
+
+    await expect(repo.create(buildUser())).rejects.toBeInstanceOf(ConflictException);
+  });
+
   it('update() sends the current mapped fields, excluding id/createdAt', async () => {
     const prisma = buildPrismaMock();
     const repo = new PrismaUserRepository(prisma as any);
@@ -59,15 +72,19 @@ describe('PrismaUserRepository', () => {
     });
   });
 
-  it('softDelete() sets deletedAt via a Prisma update', async () => {
+  it('softDelete() persists the anonymized email alongside deletedAt', async () => {
     const prisma = buildPrismaMock();
     const repo = new PrismaUserRepository(prisma as any);
+    const tombstoneEmail = Email.create('deleted-abc123@tombstone.invalid');
 
-    await repo.softDelete('user-123');
+    await repo.softDelete('user-123', tombstoneEmail);
 
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: 'user-123' },
-      data: expect.objectContaining({ deletedAt: expect.any(Date) }),
+      data: expect.objectContaining({
+        email: 'deleted-abc123@tombstone.invalid',
+        deletedAt: expect.any(Date),
+      }),
     });
   });
 
@@ -112,6 +129,74 @@ describe('PrismaUserRepository', () => {
 
     expect(prisma.user.findFirst).toHaveBeenCalledWith({
       where: { email: 'jane@example.com', deletedAt: null },
+    });
+  });
+
+  describe('createWithOutboxEvents', () => {
+    it('runs the user insert and outbox insert(s) inside a single $transaction call', async () => {
+      const prisma = buildPrismaMock();
+      const repo = new PrismaUserRepository(prisma as any);
+      const user = buildUser();
+
+      await repo.createWithOutboxEvents(user, [
+        {
+          aggregateType: 'User',
+          aggregateId: user.id,
+          eventType: 'UserRegistered',
+          payload: { userId: user.id, email: 'jane@example.com', firstName: 'Jane' },
+        },
+      ]);
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      const operations = prisma.$transaction.mock.calls[0][0];
+      expect(operations).toHaveLength(2); // user.create + outbox.create
+      expect(prisma.user.create).toHaveBeenCalledWith({ data: UserMapper.toPersistence(user) });
+      expect(prisma.outbox.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ eventType: 'UserRegistered', aggregateId: user.id }),
+      });
+    });
+
+    it('supports multiple outbox events in the same transaction', async () => {
+      const prisma = buildPrismaMock();
+      const repo = new PrismaUserRepository(prisma as any);
+      const user = buildUser();
+
+      await repo.createWithOutboxEvents(user, [
+        { aggregateType: 'User', aggregateId: user.id, eventType: 'EventA', payload: {} },
+        { aggregateType: 'User', aggregateId: user.id, eventType: 'EventB', payload: {} },
+      ]);
+
+      const operations = prisma.$transaction.mock.calls[0][0];
+      expect(operations).toHaveLength(3); // user.create + 2 outbox.create
+    });
+
+    it('translates a Prisma P2002 (unique constraint) error into ConflictException', async () => {
+      const prisma = buildPrismaMock();
+      prisma.$transaction.mockRejectedValue({ code: 'P2002', meta: { target: ['email'] } });
+      const repo = new PrismaUserRepository(prisma as any);
+      const user = buildUser();
+
+      await expect(
+        repo.createWithOutboxEvents(user, [
+          { aggregateType: 'User', aggregateId: user.id, eventType: 'UserRegistered', payload: {} },
+        ])
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('wraps a transaction failure in ExternalServiceException', async () => {
+      const prisma = buildPrismaMock();
+      prisma.$transaction.mockRejectedValue(new Error('unique constraint violation'));
+      const repo = new PrismaUserRepository(prisma as any);
+      const user = buildUser();
+
+      await expect(
+        repo.createWithOutboxEvents(user, [
+          { aggregateType: 'User', aggregateId: user.id, eventType: 'UserRegistered', payload: {} },
+        ])
+      ).rejects.toMatchObject({
+        code: 'EXTERNAL_SERVICE_ERROR',
+        context: expect.objectContaining({ operation: 'createWithOutboxEvents' }),
+      });
     });
   });
 });

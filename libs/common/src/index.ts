@@ -14,3 +14,6 @@ export * from './lib/ports/circuit-breaker';
 
 // Outbox
 export * from './lib/outbox/outbox-row';
+
+// Validation
+export * from './lib/validation/zod-validation.pipe';
