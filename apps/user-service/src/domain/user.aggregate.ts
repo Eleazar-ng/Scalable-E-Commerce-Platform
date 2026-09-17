@@ -112,8 +112,33 @@ export class User {
     this.props.updatedAt = new Date();
   }
 
+  updateName(firstName: string, lastName: string): void {
+    this.assertNotDeleted();
+
+    const trimmedFirst = firstName.trim();
+    const trimmedLast = lastName.trim();
+
+    if (trimmedFirst.length === 0) {
+      throw new InvalidUserNameException('firstName');
+    }
+    if (trimmedLast.length === 0) {
+      throw new InvalidUserNameException('lastName');
+    }
+
+    this.props.firstName = trimmedFirst;
+    this.props.lastName = trimmedLast;
+    this.props.updatedAt = new Date();
+  }
+
   /**
-   * Soft-deletes the user - sets deletedAt rather than removing the row.
+   * Soft-deletes the user - sets deletedAt rather than removing the row,
+   * AND anonymizes the email to a tombstone value. The anonymization is
+   * what actually frees the original email for reuse by a future
+   * registration - without it, the database's unique constraint on email
+   * would still see the deleted row as occupying that address forever.
+   * This also doubles as a reasonable privacy practice (not retaining a
+   * deleted account's real email indefinitely).
+   *
    * Once deleted, no other mutating operation is permitted on this
    * aggregate (enforced by assertNotDeleted() in every mutator above).
    */
@@ -122,7 +147,17 @@ export class User {
       throw new UserAlreadyDeletedException(this.props.id);
     }
     this.props.deletedAt = new Date();
+    this.props.email = this.buildTombstoneEmail();
     this.props.updatedAt = new Date();
+  }
+
+  private buildTombstoneEmail(): Email {
+    // randomUUID guarantees this can never collide with a real address or
+    // with another deleted user's tombstone, so it always satisfies the
+    // unique constraint. ".invalid" is the IANA-reserved TLD for addresses
+    // that are guaranteed not to resolve (RFC 2606) - appropriate for a
+    // value that must never actually be mailable.
+    return Email.create(`deleted-${randomUUID()}@tombstone.invalid`);
   }
 
   private assertNotDeleted(): void {
@@ -151,6 +186,14 @@ export class User {
 
   get fullName(): string {
     return `${this.props.firstName} ${this.props.lastName}`;
+  }
+
+  get firstName(): string {
+    return this.props.firstName;
+  }
+
+  get lastName(): string {
+    return this.props.lastName;
   }
 
   get role(): UserRole {

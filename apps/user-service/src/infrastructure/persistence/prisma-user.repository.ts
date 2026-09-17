@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ExternalServiceException } from '@ecommerce-platform/common';
+import { ConflictException, ExternalServiceException, NewOutboxRow } from '@ecommerce-platform/common';
 import { User } from '../../domain/user.aggregate';
 import { Email } from '../../domain/value-objects/email.vo';
 import { UserRepositoryPort } from '../../application/ports/user-repository.port';
@@ -51,11 +51,11 @@ export class PrismaUserRepository implements UserRepositoryPort {
     }
   }
 
-  async softDelete(userId: string): Promise<void> {
+  async softDelete(userId: string, anonymizedEmail: Email): Promise<void> {
     try {
       await this.prisma.user.update({
         where: { id: userId },
-        data: { deletedAt: new Date(), updatedAt: new Date() },
+        data: { email: anonymizedEmail.toString(), deletedAt: new Date(), updatedAt: new Date() },
       });
     } catch (error) {
       throw this.wrapError('softDelete', userId, error);
@@ -76,11 +76,55 @@ export class PrismaUserRepository implements UserRepositoryPort {
     return row ? UserMapper.toDomain(row) : null;
   }
 
-  private wrapError(operation: string, userId: string, error: unknown): ExternalServiceException {
+  async createWithOutboxEvents(user: User, events: NewOutboxRow[]): Promise<void> {
+    const row = UserMapper.toPersistence(user);
+    try {
+      await this.prisma.$transaction([
+        this.prisma.user.create({ data: row }),
+        ...events.map((event) =>
+          this.prisma.outbox.create({
+            data: {
+              aggregateType: event.aggregateType,
+              aggregateId: event.aggregateId,
+              eventType: event.eventType,
+              payload: event.payload as object,
+            },
+          })
+        ),
+      ]);
+    } catch (error) {
+      throw this.wrapError('createWithOutboxEvents', user.id, error);
+    }
+  }
+
+  private wrapError(
+    operation: string,
+    userId: string,
+    error: unknown
+  ): ConflictException | ExternalServiceException {
+    // Prisma's known-request errors carry a `code` like "P2002" for a
+    // unique constraint violation. Duck-typed rather than imported from
+    // the generated client, so this check works regardless of whether
+    // `prisma generate` has been run in the current environment - and so
+    // it's exercised by the mocked-client tests without needing the real
+    // PrismaClientKnownRequestError class.
+    if (this.isUniqueConstraintError(error)) {
+      return new ConflictException('An account with this email already exists', { userId });
+    }
+
     return new ExternalServiceException(`User repository ${operation} failed`, {
       retryable: true,
       context: { operation, userId },
       cause: error,
     });
+  }
+
+  private isUniqueConstraintError(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code: unknown }).code === 'P2002'
+    );
   }
 }

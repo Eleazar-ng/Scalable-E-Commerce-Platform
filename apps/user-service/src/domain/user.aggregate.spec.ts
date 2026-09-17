@@ -133,6 +133,25 @@ describe('User.softDelete', () => {
     expect(user.deletedAt).not.toBeNull();
   });
 
+  it('anonymizes the email so the original address is freed for reuse', () => {
+    const user = User.register(buildValidRegisterParams());
+    const originalEmail = user.email.toString();
+
+    user.softDelete();
+
+    expect(user.email.toString()).not.toBe(originalEmail);
+    expect(user.email.toString()).toMatch(/^deleted-.+@tombstone\.invalid$/);
+  });
+
+  it('generates a different tombstone email for every deleted user (no collision)', () => {
+    const userA = User.register(buildValidRegisterParams());
+    const userB = User.register(buildValidRegisterParams({ firstName: 'Other' }));
+    userA.softDelete();
+    userB.softDelete();
+
+    expect(userA.email.equals(userB.email)).toBe(false);
+  });
+
   it('throws if already deleted', () => {
     const user = User.register(buildValidRegisterParams());
     user.softDelete();
@@ -154,6 +173,7 @@ describe('User.softDelete', () => {
     ['suspend', (u: User) => u.suspend()],
     ['reactivate', (u: User) => u.reactivate()],
     ['changePasswordHash', (u: User) => u.changePasswordHash(PasswordHash.fromHash('$argon2id$x'))],
+    ['updateName', (u: User) => u.updateName('A', 'B')],
     ['softDelete', (u: User) => u.softDelete()],
   ])('blocks %s once the user is deleted', (_name, action) => {
     const user = User.register(buildValidRegisterParams());
@@ -162,6 +182,49 @@ describe('User.softDelete', () => {
     expect(() => action(user)).toThrow(
       _name === 'softDelete' ? UserAlreadyDeletedException : UserIsDeletedException
     );
+  });
+});
+
+describe('User.updateName', () => {
+  it('updates firstName and lastName', () => {
+    const user = User.register(buildValidRegisterParams());
+    user.updateName('Janet', 'Smith');
+    expect(user.fullName).toBe('Janet Smith');
+    expect(user.firstName).toBe('Janet');
+    expect(user.lastName).toBe('Smith');
+  });
+
+  it('trims whitespace', () => {
+    const user = User.register(buildValidRegisterParams());
+    user.updateName('  Janet  ', '  Smith  ');
+    expect(user.fullName).toBe('Janet Smith');
+  });
+
+  it('rejects an empty first name', () => {
+    const user = User.register(buildValidRegisterParams());
+    expect(() => user.updateName('', 'Smith')).toThrow(InvalidUserNameException);
+  });
+
+  it('rejects an empty last name', () => {
+    const user = User.register(buildValidRegisterParams());
+    expect(() => user.updateName('Janet', '   ')).toThrow(InvalidUserNameException);
+  });
+
+  it('is blocked once the user is deleted', () => {
+    const user = User.register(buildValidRegisterParams());
+    user.softDelete();
+    expect(() => user.updateName('Janet', 'Smith')).toThrow(UserIsDeletedException);
+  });
+
+  it('updates updatedAt', () => {
+    const user = User.register(buildValidRegisterParams());
+    const originalUpdatedAt = user.updatedAt;
+
+    jest.useFakeTimers().setSystemTime(new Date(originalUpdatedAt.getTime() + 1000));
+    user.updateName('Janet', 'Smith');
+    jest.useRealTimers();
+
+    expect(user.updatedAt.getTime()).toBeGreaterThan(originalUpdatedAt.getTime());
   });
 });
 
