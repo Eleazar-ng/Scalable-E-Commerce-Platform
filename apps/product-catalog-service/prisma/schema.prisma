@@ -1,0 +1,128 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Category {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id            String        @id @default(uuid())
+  sku           String        @unique
+  name          String
+  description   String
+  categoryId    String
+  priceCents    Int
+  currency      String
+  status        ProductStatus @default(ACTIVE)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  category  Category   @relation(fields: [categoryId], references: [id])
+  inventory Inventory?
+
+  // Supports catalog browsing/filtering by category, and status-filtered
+  // listings (e.g. "show only ACTIVE products in category X").
+  @@index([categoryId, status])
+  @@map("products")
+}
+
+enum ProductStatus {
+  ACTIVE
+  DISCONTINUED
+}
+
+model Inventory {
+  id                String   @id @default(uuid())
+  productId         String   @unique
+  availableQuantity Int
+  reservedQuantity  Int
+  // Optimistic concurrency token - every mutation increments this; the
+  // repository writes with WHERE id = ? AND version = ? (see
+  // inventory.aggregate.ts's InventoryProps doc comment for why this
+  // aggregate specifically needs it).
+  version           Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("inventory")
+}
+
+model Reservation {
+  id        String            @id @default(uuid())
+  orderId   String
+  status    ReservationStatus @default(PENDING)
+  expiresAt DateTime
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  lines ReservationLine[]
+
+  // Supports the future expiry-sweep worker's query (WHERE status =
+  // 'PENDING' AND expiresAt < now()), and general order-scoped lookups.
+  @@index([status, expiresAt])
+  @@index([orderId])
+  @@map("reservations")
+}
+
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  RELEASED
+  EXPIRED
+}
+
+model ReservationLine {
+  id            String @id @default(uuid())
+  reservationId String
+  productId     String
+  quantity      Int
+
+  reservation Reservation @relation(fields: [reservationId], references: [id])
+
+  @@index([reservationId])
+  @@map("reservation_lines")
+}
+
+// Shared Outbox model - see docs/03_prisma_conventions.md.
+model Outbox {
+  id            String       @id @default(uuid())
+  aggregateType String
+  aggregateId   String
+  eventType     String
+  payload       Json
+  status        OutboxStatus @default(PENDING)
+  createdAt     DateTime     @default(now())
+  publishedAt   DateTime?
+  retryCount    Int          @default(0)
+
+  @@index([status, createdAt])
+  @@map("outbox")
+}
+
+enum OutboxStatus {
+  PENDING
+  PUBLISHED
+  FAILED
+}
