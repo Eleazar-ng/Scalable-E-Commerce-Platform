@@ -28,7 +28,7 @@ services:
       POSTGRES_PASSWORD: user_service_dev_password
       POSTGRES_DB: user_service_db
     ports:
-      - '5432:5432'
+      - '5431:5432'
     volumes:
       - postgres-user-data:/var/lib/postgresql/data
     healthcheck:
@@ -185,7 +185,7 @@ services:
     restart: unless-stopped
     command: redis-server --requirepass redis_dev_password
     ports:
-      - '6379:6379'
+      - '6378:6379'
     volumes:
       - redis-data:/data
     healthcheck:

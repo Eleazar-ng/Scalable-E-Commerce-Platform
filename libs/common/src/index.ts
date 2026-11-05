@@ -2,6 +2,7 @@
 export * from './lib/errors/app-exception';
 export * from './lib/errors/exceptions';
 export * from './lib/errors/exception.filter';
+export * from './lib/errors/prisma-error.utils';
 
 // Graceful shutdown
 export * from './lib/shutdown/graceful-shutdown.module';

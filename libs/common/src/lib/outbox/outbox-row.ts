@@ -12,6 +12,21 @@
  */
 export enum OutboxStatus {
   PENDING = 'PENDING',
+  /**
+   * Claimed by a publisher instance (via SELECT ... FOR UPDATE SKIP
+   * LOCKED, then immediately marked PUBLISHING in the same short
+   * transaction before the row lock is released) but not yet confirmed
+   * sent to Kafka. This intermediate status is what lets the publisher
+   * release the DB row lock BEFORE making the slow network call to
+   * Kafka, rather than holding a transaction open for the duration of
+   * that call - holding a DB transaction open across network I/O is an
+   * anti-pattern (ties up a pool connection, risks transaction timeouts).
+   * A row stuck in PUBLISHING past a reasonable window (its publisher
+   * crashed mid-send) is a case the future expiry/recovery sweep would
+   * also need to handle - not yet built, same as Inventory reservation
+   * expiry.
+   */
+  PUBLISHING = 'PUBLISHING',
   PUBLISHED = 'PUBLISHED',
   FAILED = 'FAILED',
 }
@@ -24,6 +39,16 @@ export interface OutboxRow {
   aggregateId: string;
   /** The Kafka event type, matching a schema in the `contracts` lib, e.g. "OrderCreated" */
   eventType: string;
+  /**
+   * Ties every event in one saga/request flow together (mirrors the
+   * `contracts` lib's envelope.correlationId - see EventEnvelope). Must be
+   * threaded through from whatever triggered this write, not generated
+   * fresh at publish time, or cross-service saga tracing breaks. For an
+   * event that isn't part of a saga (e.g. User Service's UserRegistered),
+   * a freshly generated id here is fine since there's nothing to
+   * correlate it with.
+   */
+  correlationId: string;
   /** JSON-serializable event payload, validated against its Zod schema before insert */
   payload: Record<string, unknown>;
   status: OutboxStatus;
@@ -39,5 +64,5 @@ export interface OutboxRow {
  */
 export type NewOutboxRow = Pick<
   OutboxRow,
-  'aggregateType' | 'aggregateId' | 'eventType' | 'payload'
+  'aggregateType' | 'aggregateId' | 'eventType' | 'correlationId' | 'payload'
 >;
