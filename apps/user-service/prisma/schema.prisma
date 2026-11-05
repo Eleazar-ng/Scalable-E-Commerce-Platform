@@ -50,6 +50,7 @@ model Outbox {
   aggregateType String
   aggregateId   String
   eventType     String
+  correlationId String
   payload       Json
   status        OutboxStatus @default(PENDING)
   createdAt     DateTime     @default(now())
@@ -62,6 +63,7 @@ model Outbox {
 
 enum OutboxStatus {
   PENDING
+  PUBLISHING
   PUBLISHED
   FAILED
 }

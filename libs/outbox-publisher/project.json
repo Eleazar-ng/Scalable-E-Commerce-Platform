@@ -1,0 +1,9 @@
+{
+  "name": "outbox-publisher",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/outbox-publisher/src",
+  "projectType": "library",
+  "tags": [],
+  "// targets": "to see all targets run: nx show project outbox-publisher --web",
+  "targets": {}
+}

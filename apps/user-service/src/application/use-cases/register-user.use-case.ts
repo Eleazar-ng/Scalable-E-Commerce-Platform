@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { ConflictException, NewOutboxRow } from '@ecommerce-platform/common';
 import { userRegisteredPayloadSchema } from '@ecommerce-platform/contracts';
@@ -84,6 +85,12 @@ export class RegisterUserUseCase {
             aggregateType: 'User',
             aggregateId: user.id,
             eventType: 'UserRegistered',
+            // Not part of any saga - UserRegistered has no upstream event
+            // to inherit a correlationId from, so a fresh one is correct
+            // here (unlike Catalog Service's saga-participant events,
+            // which must propagate the correlationId of whatever
+            // triggered them).
+            correlationId: randomUUID(),
             payload,
           };
         }

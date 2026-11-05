@@ -143,6 +143,7 @@ describe('PrismaUserRepository', () => {
           aggregateType: 'User',
           aggregateId: user.id,
           eventType: 'UserRegistered',
+          correlationId: 'corr-1',
           payload: { userId: user.id, email: 'jane@example.com', firstName: 'Jane' },
         },
       ]);
@@ -162,8 +163,8 @@ describe('PrismaUserRepository', () => {
       const user = buildUser();
 
       await repo.createWithOutboxEvents(user, [
-        { aggregateType: 'User', aggregateId: user.id, eventType: 'EventA', payload: {} },
-        { aggregateType: 'User', aggregateId: user.id, eventType: 'EventB', payload: {} },
+        { aggregateType: 'User', aggregateId: user.id, eventType: 'EventA', correlationId: 'corr-1', payload: {} },
+        { aggregateType: 'User', aggregateId: user.id, eventType: 'EventB', correlationId: 'corr-1', payload: {} },
       ]);
 
       const operations = prisma.$transaction.mock.calls[0][0];
@@ -178,7 +179,7 @@ describe('PrismaUserRepository', () => {
 
       await expect(
         repo.createWithOutboxEvents(user, [
-          { aggregateType: 'User', aggregateId: user.id, eventType: 'UserRegistered', payload: {} },
+          { aggregateType: 'User', aggregateId: user.id, eventType: 'UserRegistered', correlationId: 'corr-1', payload: {} },
         ])
       ).rejects.toBeInstanceOf(ConflictException);
     });
@@ -191,7 +192,7 @@ describe('PrismaUserRepository', () => {
 
       await expect(
         repo.createWithOutboxEvents(user, [
-          { aggregateType: 'User', aggregateId: user.id, eventType: 'UserRegistered', payload: {} },
+          { aggregateType: 'User', aggregateId: user.id, eventType: 'UserRegistered', correlationId: 'corr-1', payload: {} },
         ])
       ).rejects.toMatchObject({
         code: 'EXTERNAL_SERVICE_ERROR',

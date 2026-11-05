@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { ConflictException, ExternalServiceException, NewOutboxRow } from '@ecommerce-platform/common';
+import {
+  ConflictException,
+  ExternalServiceException,
+  isPrismaUniqueConstraintError,
+  NewOutboxRow,
+} from '@ecommerce-platform/common';
 import { User } from '../../domain/user.aggregate';
 import { Email } from '../../domain/value-objects/email.vo';
 import { UserRepositoryPort } from '../../application/ports/user-repository.port';
@@ -87,6 +92,7 @@ export class PrismaUserRepository implements UserRepositoryPort {
               aggregateType: event.aggregateType,
               aggregateId: event.aggregateId,
               eventType: event.eventType,
+              correlationId: event.correlationId,
               payload: event.payload as object,
             },
           })
@@ -103,12 +109,11 @@ export class PrismaUserRepository implements UserRepositoryPort {
     error: unknown
   ): ConflictException | ExternalServiceException {
     // Prisma's known-request errors carry a `code` like "P2002" for a
-    // unique constraint violation. Duck-typed rather than imported from
-    // the generated client, so this check works regardless of whether
-    // `prisma generate` has been run in the current environment - and so
-    // it's exercised by the mocked-client tests without needing the real
-    // PrismaClientKnownRequestError class.
-    if (this.isUniqueConstraintError(error)) {
+    // unique constraint violation - checked via the shared, duck-typed
+    // isPrismaUniqueConstraintError (see libs/common) rather than
+    // importing the generated client, so this works regardless of
+    // whether `prisma generate` has been run in the current environment.
+    if (isPrismaUniqueConstraintError(error)) {
       return new ConflictException('An account with this email already exists', { userId });
     }
 
@@ -117,14 +122,5 @@ export class PrismaUserRepository implements UserRepositoryPort {
       context: { operation, userId },
       cause: error,
     });
-  }
-
-  private isUniqueConstraintError(error: unknown): boolean {
-    return (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      (error as { code: unknown }).code === 'P2002'
-    );
   }
 }
